@@ -163,29 +163,86 @@ export const apiService = {
     }
   },
 
-  /**
-   * Helper para traducir estados del Frontend (masculino/espacio) al Backend (femenino/guion bajo esperado por la DB)
-   */
+  /* =========================================================================
+     TRADUCTORES DE ENUMS (Frontend Strings <-> Backend Integers/Strings)
+     ========================================================================= */
+
+  // Categorías: Hardware=0, Software=1, Redes y Servidores=2, Accesos y Seguridad=3, Telefonía=4, Otros=5
+  _mapCategoriaToBackend(cat) {
+    const map = {
+      'Hardware': 0,
+      'Software': 1,
+      'Redes y Servidores': 2,
+      'Accesos y Seguridad': 3,
+      'Telefonía': 4,
+      'Otros': 5
+    };
+    return map[cat] ?? 5;
+  },
+
+  _mapCategoriaToFrontend(catNum) {
+    const map = {
+      0: 'Hardware',
+      1: 'Software',
+      2: 'Redes y Servidores',
+      3: 'Accesos y Seguridad',
+      4: 'Telefonía',
+      5: 'Otros'
+    };
+    return map[catNum] ?? 'Otros';
+  },
+
+  // Prioridades: Baja=0, Media=1, Alta=2
+  _mapPrioridadToBackend(prio) {
+    const map = {
+      'Baja': 0,
+      'Media': 1,
+      'Alta': 2
+    };
+    return map[prio] ?? 0;
+  },
+
+  _mapPrioridadToFrontend(prioNum) {
+    const map = {
+      0: 'Baja',
+      1: 'Media',
+      2: 'Alta'
+    };
+    return map[prioNum] ?? 'Baja';
+  },
+
+  // Estados/Status en Backend: Abierta=0, En_Proceso=1, Cerrada=2
   _mapEstadoToBackend(estado) {
+    const map = {
+      'Abierto': 0,
+      'Abierta': 0,
+      'En Proceso': 1,
+      'En_Proceso': 1,
+      'Cerrado': 2,
+      'Cerrada': 2
+    };
+    return map[estado] ?? 0;
+  },
+
+  _mapEstadoToBackendText(estado) {
     if (!estado) return 'Abierta';
     const est = String(estado).trim();
     if (est === 'Abierto' || est === 'Abierta') return 'Abierta';
     if (est === 'Cerrado' || est === 'Cerrada') return 'Cerrada';
-    if (est === 'En Proceso' || est === 'En_Proceso' || est === 'En_proceso' || est === 'En proceso') return 'En_Proceso';
+    if (est === 'En Proceso' || est === 'En_Proceso' || est === 'En proceso') return 'En_Proceso';
     return est;
   },
 
-  /**
-   * Helper para traducir estados del Backend (femenino/guion bajo) al Frontend (masculino/espacio usado en UI de React)
-   */
-  _mapEstadoToFrontend(estado) {
-    if (!estado) return 'Abierto';
-    const est = String(estado).trim();
-    if (est === 'Abierta' || est === 'Abierto') return 'Abierto';
-    if (est === 'Cerrada' || est === 'Cerrado') return 'Cerrado';
-    if (est === 'En_Proceso' || est === 'En_proceso' || est === 'En Proceso' || est === 'En proceso') return 'En Proceso';
-    return est;
+  _mapEstadoToFrontend(estadoVal) {
+    if (estadoVal === 0 || estadoVal === '0' || estadoVal === 'Abierta' || estadoVal === 'Abierto') return 'Abierto';
+    if (estadoVal === 1 || estadoVal === '1' || estadoVal === 'En_Proceso' || estadoVal === 'En Proceso') return 'En Proceso';
+    if (estadoVal === 2 || estadoVal === '2' || estadoVal === 'Cerrada' || estadoVal === 'Cerrado') return 'Cerrado';
+    return 'Abierto';
   },
+
+  /* =========================================================================
+     MÉTODOS PRINCIPALES DE LA API
+     ========================================================================= */
 
   /**
    * Helper para extraer un Array de incidencias de forma flexible de cualquier
@@ -195,40 +252,34 @@ export const apiService = {
     if (!data) return [];
     if (Array.isArray(data)) return data;
 
-    // Buscar en propiedades de respuesta comunes
     const target = data.datos ?? data.data ?? data.items ?? data.list ?? data.incidencias;
     if (Array.isArray(target)) return target;
 
-    // Si target es un objeto, escanear si tiene algún array adentro
     if (target && typeof target === 'object') {
       if (Array.isArray(target.incidencias)) return target.incidencias;
       if (Array.isArray(target.items)) return target.items;
       if (Array.isArray(target.data)) return target.data;
       if (Array.isArray(target.list)) return target.list;
 
-      // Buscar el primer array que contenga el objeto target
       for (const key in target) {
         if (Array.isArray(target[key])) {
           return target[key];
         }
       }
 
-      // Si target representa una incidencia única
-      if (target.id || target.id_incidencia || target.asunto) {
+      if (target.id || target.id_incidencia || target.asunto || target.titulo) {
         return [target];
       }
     }
 
-    // Buscar en la raíz de 'data' si hay algún array
     for (const key in data) {
       if (Array.isArray(data[key])) {
         return data[key];
       }
     }
 
-    // Si data en sí representa un objeto individual
     if (typeof data === 'object') {
-      if (data.id || data.id_incidencia || data.asunto) {
+      if (data.id || data.id_incidencia || data.asunto || data.titulo) {
         return [data];
       }
     }
@@ -237,44 +288,42 @@ export const apiService = {
   },
 
   /**
-   * Helper de traducción para normalizar las propiedades del Backend
-   * a campos estandarizados del Frontend de React.
+   * Normaliza propiedades del Backend a campos estandarizados de React
    */
   _mapIncidencia(rawItem) {
     if (!rawItem) return null;
 
     // Normalizar ID
-    const idVal = rawItem.id ?? rawItem.id_incidencia ?? rawItem.idIncidencia ?? rawItem.id_incidencias ?? rawItem.folio ?? '';
+    const idVal = rawItem.id ?? rawItem.id_incidencia ?? rawItem.idIncidencia ?? rawItem.folio ?? '';
     const id = idVal !== '' ? String(idVal) : 'INC-000';
 
-    // Campos primarios
-    const asunto = rawItem.asunto ?? rawItem.titulo ?? rawItem.nombre ?? rawItem.issue ?? rawItem.subject ?? 'Sin Asunto';
-    const categoria = rawItem.categoria ?? rawItem.category ?? rawItem.tipo ?? rawItem.area ?? 'Otros';
-    const prioridad = rawItem.prioridad ?? rawItem.priority ?? rawItem.nivel ?? 'Baja';
+    // Traducir campos de texto del Enum Numérico o String
+    const asunto = rawItem.titulo ?? rawItem.asunto ?? rawItem.nombre ?? rawItem.issue ?? 'Sin Asunto';
+    const categoria = this._mapCategoriaToFrontend(rawItem.categoria);
+    const prioridad = this._mapPrioridadToFrontend(rawItem.prioridad);
     
-    // Normalizar el estado al género masculino para que funcione con el CSS y los selects
-    const rawEstado = rawItem.estado ?? rawItem.status ?? rawItem.id_estado ?? rawItem.state ?? 'Abierto';
+    // Normalizar el estado al género masculino para que funcione con el CSS y los selectores
+    const rawEstado = rawItem.status ?? rawItem.estado ?? rawItem.state ?? 0;
     const estado = this._mapEstadoToFrontend(rawEstado);
     
-    const descripcion = rawItem.descripcion ?? rawItem.description ?? rawItem.detalle ?? rawItem.mensaje ?? 'Sin Descripción';
+    const descripcion = rawItem.descripcion ?? rawItem.description ?? rawItem.detalle ?? 'Sin Descripción';
     
     // Metadatos
-    const fechaCreacion = rawItem.fechaCreacion ?? rawItem.fecha_creacion ?? rawItem.fecha ?? rawItem.creado_el ?? rawItem.createdAt ?? new Date().toISOString();
-    const creador = rawItem.creador ?? rawItem.usuario ?? rawItem.reporta ?? rawItem.nombreUsuario ?? rawItem.creadoPor ?? rawItem.createdBy ?? 'Usuario';
-    const observaciones = rawItem.observaciones ?? rawItem.comentarios ?? rawItem.observacion ?? rawItem.comments ?? '';
+    const fechaCreacion = rawItem.fechaCreacion ?? rawItem.fecha_creacion ?? rawItem.fecha ?? rawItem.createdAt ?? new Date().toISOString();
+    const creador = rawItem.creador ?? rawItem.usuario ?? rawItem.reporta ?? rawItem.nombreUsuario ?? 'Usuario';
+    const observaciones = rawItem.observaciones ?? rawItem.comentarios ?? rawItem.observacion ?? '';
 
     // Historial / Auditoría de Cambios
-    const rawHistorial = rawItem.historial ?? rawItem.logs ?? rawItem.historial_estados ?? rawItem.movimientos;
+    const rawHistorial = rawItem.historial ?? rawItem.logs ?? rawItem.movimientos;
     let historial = [];
     if (Array.isArray(rawHistorial)) {
       historial = rawHistorial.map(h => ({
-        fecha: h.fecha ?? h.createdAt ?? h.fecha_movimiento ?? new Date().toISOString(),
-        estado: this._mapEstadoToFrontend(h.estado ?? h.status ?? 'Abierto'),
-        observacion: h.observacion ?? h.observaciones ?? h.comentario ?? 'Cambio registrado',
-        usuario: h.usuario ?? h.nombreUsuario ?? h.creadoPor ?? 'Usuario'
+        fecha: h.fecha ?? h.createdAt ?? new Date().toISOString(),
+        estado: this._mapEstadoToFrontend(h.estado ?? h.status ?? 0),
+        observacion: h.observacion ?? h.observaciones ?? 'Cambio registrado',
+        usuario: h.usuario ?? h.nombreUsuario ?? 'Usuario'
       }));
     } else {
-      // Generar historial implícito para evitar fallas en UI
       historial = [
         {
           fecha: fechaCreacion,
@@ -283,10 +332,9 @@ export const apiService = {
           usuario: creador
         }
       ];
-      // Si ya está en otro estado, simular la transición inicial
       if (estado !== 'Abierto') {
         historial.push({
-          fecha: new Date(fechaCreacion).getTime() + 60000 < Date.now() ? new Date(new Date(fechaCreacion).getTime() + 60000).toISOString() : new Date().toISOString(),
+          fecha: new Date().toISOString(),
           estado: estado,
           observacion: observaciones || 'Estado actualizado por el sistema.',
           usuario: 'Sistema'
@@ -343,23 +391,33 @@ export const apiService = {
       body: JSON.stringify(bodyData)
     });
 
-    // Comprobar indicadores de éxito lógicos del Backend (incluso si responde con HTTP Status 200 OK)
-    const isSuccess = data.statusExec === true || data.statusExec === 1 || data.success === true || data.flag === 1 || data.flag === true;
+    // Comprobar éxito lógico del Backend
+    const isSuccess = data.statusExec === true || data.statusExec === 1 || data.success === true || data.flag === 1 || data.flag === true || data.id !== undefined;
     if (!isSuccess) {
       throw new Error(data.msg || data.message || data.mensaje || 'Usuario o contraseña incorrectos.');
     }
 
-    // Extraer datos del usuario de forma flexible (incluyendo 'datos' devuelto por el backend)
-    const rawUser = data.datos || data.user || data.usuario || data.data || data;
-    const extractedToken = data.token || data.accessToken || data.jwt || data.tokenAcceso || data.token_acceso || '';
+    // Extraer datos del usuario de forma flexible (buscando arrays anidados en 'datos.usuario')
+    let rawUser = data.datos || data.user || data.usuario || data.data || data;
+    if (rawUser && rawUser.usuario) {
+      if (Array.isArray(rawUser.usuario)) {
+        rawUser = rawUser.usuario[0]; // Extraemos el primer objeto del array
+      } else {
+        rawUser = rawUser.usuario;
+      }
+    } else if (Array.isArray(rawUser)) {
+      rawUser = rawUser[0];
+    }
 
-    // Mapear campos para asegurar compatibilidad con la UI de React
+    const extractedToken = data.token || data.accessToken || data.jwt || 'jwt-token-placeholder';
+
+    // Mapear campos con soporte para id_usuario y correo_institucional de tu base de datos MySQL
     const mappedUser = {
-      id: rawUser.id || rawUser.idUsuario || rawUser.id_usuario || 1,
-      name: rawUser.name || rawUser.nombre || rawUser.nombreUsuario || rawUser.fullName || rawUser.email || rawUser.correo || 'Usuario',
-      email: rawUser.email || rawUser.correo || email,
-      role: rawUser.role || rawUser.rol || rawUser.perfil || 'Usuario',
-      avatar: rawUser.avatar || rawUser.foto || rawUser.imagen || `https://ui-avatars.com/api/?name=${encodeURIComponent(rawUser.name || rawUser.nombre || 'Usuario')}&background=8b5cf6&color=fff`
+      id: rawUser.id_usuario ?? rawUser.idUsuario ?? rawUser.id ?? rawUser.Id ?? rawUser.IdUsuario ?? rawUser.Id_Usuario ?? 1,
+      name: rawUser.nombre_completo ?? rawUser.Nombre_Completo ?? rawUser.nombreCompleto ?? rawUser.NombreCompleto ?? rawUser.name ?? rawUser.Name ?? rawUser.nombre ?? rawUser.Nombre ?? 'Usuario',
+      email: rawUser.correo_institucional ?? rawUser.correo ?? rawUser.correo_Institucional ?? rawUser.email ?? rawUser.Email ?? email,
+      role: rawUser.rol ?? rawUser.Rol ?? rawUser.role ?? rawUser.Role ?? 'Usuario',
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(rawUser.nombre_completo || rawUser.name || 'Usuario')}&background=8b5cf6&color=fff`
     };
 
     return {
@@ -376,12 +434,10 @@ export const apiService = {
       return JSON.parse(localStorage.getItem('hd_incidencias'));
     }
 
-    // Petición real
     const data = await this._request('/api/incidencias', {
       headers: this._getAuthHeaders()
     });
 
-    // Extraer incidencias y normalizarlas
     const arr = this._extractArray(data);
     return arr.map(item => this._mapIncidencia(item)).filter(Boolean);
   },
@@ -396,7 +452,6 @@ export const apiService = {
       return item;
     }
 
-    // Petición real
     const data = await this._request(`/api/incidencias/${id}`, {
       headers: this._getAuthHeaders()
     });
@@ -462,75 +517,22 @@ export const apiService = {
       }
     }
 
-    // Traducir el estado inicial al formato del Backend
-    const initialStatus = this._mapEstadoToBackend('Abierto');
-
-    // Inyectamos múltiples variantes de propiedades para evitar fallas por nomenclatura en la BD (camelCase, snake_case y PascalCase)
-    const payloadCompleto = {
-      // Título / Asunto
-      asunto: nuevaIncidencia.asunto,
-      Asunto: nuevaIncidencia.asunto,
-      titulo: nuevaIncidencia.asunto,
-      Titulo: nuevaIncidencia.asunto,
-      title: nuevaIncidencia.asunto,
-      Title: nuevaIncidencia.asunto,
-      subject: nuevaIncidencia.asunto,
-      Subject: nuevaIncidencia.asunto,
-
-      // Descripción / Detalle
-      descripcion: nuevaIncidencia.descripcion,
-      Descripcion: nuevaIncidencia.descripcion,
-      description: nuevaIncidencia.descripcion,
-      Description: nuevaIncidencia.descripcion,
-      detalle: nuevaIncidencia.descripcion,
-      Detalle: nuevaIncidencia.descripcion,
-
-      // Categoría / Área
-      categoria: nuevaIncidencia.categoria,
-      Categoria: nuevaIncidencia.categoria,
-      category: nuevaIncidencia.categoria,
-      Category: nuevaIncidencia.categoria,
-      tipo: nuevaIncidencia.categoria,
-      Tipo: nuevaIncidencia.categoria,
-
-      // Prioridad / Nivel
-      prioridad: nuevaIncidencia.prioridad,
-      Prioridad: nuevaIncidencia.prioridad,
-      priority: nuevaIncidencia.prioridad,
-      Priority: nuevaIncidencia.prioridad,
-      nivel: nuevaIncidencia.prioridad,
-      Nivel: nuevaIncidencia.prioridad,
-
-      // Estado / Status inicial traducido
-      estado: initialStatus,
-      Estado: initialStatus,
-      status: initialStatus,
-      Status: initialStatus,
-      state: initialStatus,
-      State: initialStatus,
-
-      // IDs de usuario vinculados
+    // ESTRUCTURA EXACTA DEL POST api/incidencias PROPORCIONADA:
+    // { "idUsuario": 2, "titulo": "...", "descripcion": "...", "categoria": 0, "prioridad": 0, "status": 0, "observaciones": "..." }
+    const payloadReal = {
       idUsuario: userIdVal,
-      IdUsuario: userIdVal,
-      id_usuario: userIdVal,
-      usuarioId: userIdVal,
-      UsuarioId: userIdVal,
-      userId: userIdVal,
-      UserId: userIdVal,
-      idCreador: userIdVal,
-      IdCreador: userIdVal,
-      creadorId: userIdVal,
-      CreadorId: userIdVal,
-      creador: usuarioNombre,
-      Creador: usuarioNombre,
-      usuario: usuarioNombre,
-      Usuario: usuarioNombre
+      titulo: nuevaIncidencia.asunto,
+      descripcion: nuevaIncidencia.descripcion,
+      categoria: this._mapCategoriaToBackend(nuevaIncidencia.categoria),
+      prioridad: this._mapPrioridadToBackend(nuevaIncidencia.prioridad),
+      status: this._mapEstadoToBackend('Abierto'), // 0 para Abierta
+      observaciones: 'Incidencia creada desde el frontend.'
     };
 
     const data = await this._request('/api/incidencias', {
       method: 'POST',
       headers: this._getAuthHeaders(),
-      body: JSON.stringify(payloadCompleto)
+      body: JSON.stringify(payloadReal)
     });
 
     const item = data.datos ?? data.data ?? data.incidencia ?? data;
@@ -606,63 +608,22 @@ export const apiService = {
       } catch (e) {}
     }
 
-    // Traducir el nuevo estado al género y formato del Backend (ej. "Cerrado" -> "Cerrada")
-    const estadoBackend = this._mapEstadoToBackend(nuevoEstado);
+    // Traducir al formato esperado por el PUT del Swagger / API real:
+    // status puede ser el texto ("Cerrada", "En_Proceso", "Abierta") o el entero del Enum según la API.
+    // Usamos el texto como demostraste en tu ejemplo exitoso: { "status": "Cerrada", "observaciones": "..." }
+    const estadoText = this._mapEstadoToBackendText(nuevoEstado);
 
-    // Inyectamos múltiples variantes de propiedad para el estado, observaciones e identificadores (camelCase, snake_case y PascalCase)
     const payloadActualizacion = {
-      // Identificadores de la incidencia
-      id: id,
-      Id: id,
-      idIncidencia: id,
-      IdIncidencia: id,
-      id_incidencia: id,
-      folio: id,
-      Folio: id,
-
-      // Estado / Status (mapeado al formato que el backend espera)
-      estado: estadoBackend,
-      Estado: estadoBackend,
-      nuevoEstado: estadoBackend,
-      NuevoEstado: estadoBackend,
-      nuevo_estado: estadoBackend,
-      status: estadoBackend,
-      Status: estadoBackend,
-      state: estadoBackend,
-      State: estadoBackend,
-      nuevoStatus: estadoBackend,
-      NuevoStatus: estadoBackend,
-      nuevo_status: estadoBackend,
-
-      // Observaciones / Comentarios
-      observaciones: observaciones,
-      Observaciones: observaciones,
-      observacion: observaciones,
-      Observacion: observaciones,
-      comentario: observaciones,
-      Comentario: observaciones,
-      comentarios: observaciones,
-      Comentarios: observaciones,
-      nota: observaciones,
-      Nota: observaciones,
-      notas: observaciones,
-      Notas: observaciones,
-      justificacion: observaciones,
-      Justificacion: observaciones,
-
-      // IDs de usuario operador/actualizador
-      idUsuario: userIdVal,
-      IdUsuario: userIdVal,
-      id_usuario: userIdVal,
-      usuarioId: userIdVal,
-      UsuarioId: userIdVal,
-      userId: userIdVal,
-      UserId: userIdVal,
-      idOperador: userIdVal,
-      IdOperador: userIdVal,
-      operadorId: userIdVal,
-      OperadorId: userIdVal
+      status: estadoText,
+      observaciones: observaciones
     };
+
+    if (userIdVal) {
+      const parsedUserId = parseInt(userIdVal, 10);
+      if (!isNaN(parsedUserId)) {
+        payloadActualizacion.idUsuario = parsedUserId;
+      }
+    }
 
     const data = await this._request(`/api/incidencias/${id}/estado`, {
       method: 'PUT',
