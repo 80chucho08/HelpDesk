@@ -3,29 +3,30 @@ import { apiService } from '../services/api';
 
 /**
  * Vista de Login - Pantalla de inicio de sesión formal e interactiva.
- * Valida credenciales consumiendo el apiService y maneja el estado de carga.
+ * Admite tanto "Usuario" plano como "Correo electrónico" y valida credenciales.
+ * Incluye el interruptor de Modo Demo en la pantalla de inicio de sesión para evitar bloqueos.
  */
 export default function Login({ onLoginSuccess, addToast, theme, toggleTheme }) {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  
+  // Estado local para alternar el Modo Demo desde el Login
+  const [isDemoMode, setIsDemoMode] = useState(apiService.isDemoMode());
 
   // Validaciones del lado del cliente
   const validateForm = () => {
     const newErrors = {};
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    if (!email) {
-      newErrors.email = 'El correo electrónico es requerido.';
-    } else if (!emailRegex.test(email)) {
-      newErrors.email = 'El formato de correo no es válido.';
+    if (!username.trim()) {
+      newErrors.username = 'El usuario o correo es requerido.';
     }
 
     if (!password) {
       newErrors.password = 'La contraseña es requerida.';
-    } else if (password.length < 6) {
-      newErrors.password = 'La contraseña debe tener al menos 6 caracteres.';
+    } else if (password.length < 3) {
+      newErrors.password = 'La contraseña debe tener al menos 3 caracteres.';
     }
 
     setErrors(newErrors);
@@ -38,8 +39,8 @@ export default function Login({ onLoginSuccess, addToast, theme, toggleTheme }) 
 
     setIsLoading(true);
     try {
-      // Llamar al API (simulada o real según el interruptor de Modo Demo)
-      const response = await apiService.login(email, password);
+      // Llamar al API (simulada o real según el interruptor activo en caliente)
+      const response = await apiService.login(username.trim(), password);
       
       // Prueba 1: Login correcto -> Bandera + Datos básicos
       addToast(`¡Bienvenido, ${response.user.name}! Sesión iniciada con éxito (Rol: ${response.user.role}).`, 'success');
@@ -47,16 +48,32 @@ export default function Login({ onLoginSuccess, addToast, theme, toggleTheme }) 
       // Pasar datos al componente padre
       onLoginSuccess(response.user, response.token);
     } catch (error) {
-      // Prueba 2: Login incorrecto -> Bandera + Mensaje controlado
+      // Prueba 2: Login incorrecto -> Bandera + Mensaje de error
       addToast(error.message || 'Error al iniciar sesión. Verifica tus credenciales.', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Helper para autocompletar credenciales de prueba
-  const handleFillCredentials = (testEmail, testPassword) => {
-    setEmail(testEmail);
+  // Alternar Modo Demo y alertar al usuario
+  const handleToggleDemoMode = (val) => {
+    apiService.setDemoMode(val);
+    setIsDemoMode(val);
+    addToast(
+      val 
+        ? 'Modo Demo Activo: Se simulará la base de datos MySQL localmente.' 
+        : `Modo API Real Activo: Las peticiones apuntarán a ${apiService.getApiBaseUrl()}`,
+      'info'
+    );
+  };
+
+  // Helper para autocompletar credenciales de prueba (sólo útil en Modo Demo)
+  const handleFillCredentials = (testUser, testPassword) => {
+    if (!isDemoMode) {
+      addToast('Activa el "Modo Simulado" para poder usar las cuentas demo rápidas.', 'warning');
+      return;
+    }
+    setUsername(testUser);
     setPassword(testPassword);
     setErrors({});
   };
@@ -68,7 +85,7 @@ export default function Login({ onLoginSuccess, addToast, theme, toggleTheme }) 
       <div className="absolute w-80 h-80 bg-violet-600/10 rounded-full blur-3xl -top-20 -left-20"></div>
       <div className="absolute w-96 h-96 bg-brand-primary/10 rounded-full blur-3xl -bottom-20 -right-20"></div>
 
-      {/* Botón de alternar Tema (Oscuro/Claro) en la esquina superior derecha */}
+      {/* Botón de alternar Tema en la esquina superior derecha */}
       <div className="absolute top-6 right-6 z-10">
         <button 
           onClick={toggleTheme}
@@ -98,16 +115,37 @@ export default function Login({ onLoginSuccess, addToast, theme, toggleTheme }) 
             Sistema de HelpDesk
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Inicia sesión con tu cuenta corporativa para reportar o dar seguimiento a incidencias.
+            Inicia sesión con tu cuenta de usuario o correo para reportar o dar seguimiento a incidencias.
           </p>
+        </div>
+
+        {/* Interruptor de Modo Demo (Crucial para permitir login real) */}
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-100/50 dark:bg-slate-950/40 border border-slate-200/60 dark:border-slate-800/80 text-xs">
+          <div className="flex flex-col gap-0.5 max-w-[70%]">
+            <span className="font-bold text-slate-700 dark:text-slate-350">
+              {isDemoMode ? 'Simulador de API (Activo)' : 'Conexión a API Real'}
+            </span>
+            <span className="text-[10px] text-slate-450 dark:text-slate-500 truncate block">
+              {isDemoMode ? 'Usa base de datos MySQL local ficticia' : `Destino: ${apiService.getApiBaseUrl()}`}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${isDemoMode ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`}></span>
+            <input
+              type="checkbox"
+              checked={isDemoMode}
+              onChange={(e) => handleToggleDemoMode(e.target.checked)}
+              className="w-4 h-4 text-brand-primary accent-brand-primary cursor-pointer"
+            />
+          </div>
         </div>
 
         {/* Formulario */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          {/* Email */}
+          {/* Usuario / Correo */}
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Correo Electrónico
+            <label htmlFor="username" className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-550">
+              Usuario o Correo
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
@@ -116,24 +154,24 @@ export default function Login({ onLoginSuccess, addToast, theme, toggleTheme }) 
                 </svg>
               </span>
               <input
-                id="email"
-                type="email"
+                id="username"
+                type="text"
                 disabled={isLoading}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={`w-full pl-10 pr-4 py-3 bg-slate-50/50 dark:bg-slate-950/30 border ${errors.email ? 'border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 dark:border-slate-800 focus:border-brand-primary focus:ring-brand-primary-glow'} rounded-2xl text-sm transition-all outline-none focus:ring-4`}
-                placeholder="ejemplo@helpdesk.com"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className={`w-full pl-10 pr-4 py-3 bg-slate-50/50 dark:bg-slate-950/30 border ${errors.username ? 'border-rose-500 focus:ring-rose-500/20' : 'border-slate-200 dark:border-slate-800 focus:border-brand-primary focus:ring-brand-primary-glow'} rounded-2xl text-sm transition-all outline-none focus:ring-4`}
+                placeholder="Ingresa tu usuario o correo"
               />
             </div>
-            {errors.email && (
-              <span className="text-xs text-rose-500 font-semibold">{errors.email}</span>
+            {errors.username && (
+              <span className="text-xs text-rose-500 font-semibold">{errors.username}</span>
             )}
           </div>
 
           {/* Password */}
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center">
-              <label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-550">
                 Contraseña
               </label>
             </div>
@@ -191,7 +229,7 @@ export default function Login({ onLoginSuccess, addToast, theme, toggleTheme }) 
             type="button"
             disabled={isLoading}
             onClick={() => handleFillCredentials('admin@helpdesk.com', 'admin123')}
-            className="p-2.5 border border-slate-200 dark:border-slate-800 hover:border-brand-primary dark:hover:border-brand-primary rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850 hover:scale-102 transition-all cursor-pointer text-left flex flex-col gap-0.5"
+            className={`p-2.5 border rounded-xl text-xs font-semibold text-slate-650 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-850 hover:scale-102 transition-all cursor-pointer text-left flex flex-col gap-0.5 ${!isDemoMode ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-800' : 'border-slate-200 dark:border-slate-800 hover:border-brand-primary dark:hover:border-brand-primary'}`}
           >
             <span className="text-[10px] font-bold uppercase text-brand-primary">Administrador</span>
             <span className="truncate">admin@helpdesk.com</span>
@@ -201,7 +239,7 @@ export default function Login({ onLoginSuccess, addToast, theme, toggleTheme }) 
             type="button"
             disabled={isLoading}
             onClick={() => handleFillCredentials('soporte@helpdesk.com', 'soporte123')}
-            className="p-2.5 border border-slate-200 dark:border-slate-800 hover:border-brand-primary dark:hover:border-brand-primary rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850 hover:scale-102 transition-all cursor-pointer text-left flex flex-col gap-0.5"
+            className={`p-2.5 border rounded-xl text-xs font-semibold text-slate-650 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-850 hover:scale-102 transition-all cursor-pointer text-left flex flex-col gap-0.5 ${!isDemoMode ? 'opacity-40 cursor-not-allowed border-slate-200 dark:border-slate-800' : 'border-slate-200 dark:border-slate-800 hover:border-brand-primary dark:hover:border-brand-primary'}`}
           >
             <span className="text-[10px] font-bold uppercase text-brand-primary">Soporte</span>
             <span className="truncate">soporte@helpdesk.com</span>

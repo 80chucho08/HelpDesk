@@ -106,17 +106,215 @@ export const apiService = {
     return API_BASE_URL;
   },
 
+  /**
+   * Helper unificado para realizar peticiones HTTP reales a la API
+   * Muestra logs detallados y maneja errores de red / CORS / SSL
+   */
+  async _request(endpoint, options = {}) {
+    const url = `${API_BASE_URL}${endpoint}`;
+    console.group(`🔌 [API Request] ${options.method || 'GET'} ${endpoint}`);
+    console.log('URL de Destino:', url);
+    if (options.body) {
+      try {
+        console.log('Payload enviado:', JSON.parse(options.body));
+      } catch (e) {
+        console.log('Payload enviado (raw):', options.body);
+      }
+    }
+    console.groupEnd();
+
+    try {
+      const response = await fetch(url, options);
+      
+      console.group(`📥 [API Response] ${options.method || 'GET'} ${endpoint}`);
+      console.log('HTTP Status:', response.status, response.statusText);
+      
+      let data = {};
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = text ? { message: text } : {};
+      }
+      console.log('Respuesta recibida:', data);
+      console.groupEnd();
+
+      if (!response.ok) {
+        throw new Error(data.message || data.mensaje || data.msg || data.error || `Error del servidor (${response.status})`);
+      }
+      return data;
+    } catch (error) {
+      console.group(`❌ [API Network Error] ${options.method || 'GET'} ${endpoint}`);
+      console.error(error);
+      console.groupEnd();
+
+      // Diagnóstico detallado para fallas de red comunes en localhost (CORS, SSL, Host Caído)
+      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        throw new Error(
+          `No se pudo establecer comunicación con el backend local en ${API_BASE_URL}. \n\n` +
+          `Verifica lo siguiente:\n` +
+          `1) ¿El backend está corriendo y escuchando en ese puerto?\n` +
+          `2) Si usa HTTPS, ¿aceptaste el certificado auto-firmado en tu navegador? Abre directamente ${API_BASE_URL} en otra pestaña del navegador y aprueba el certificado.\n` +
+          `3) ¿Tiene habilitadas las políticas de CORS tu backend? Asegúrate de que tu backend permita solicitudes HTTP (CORS) desde el puerto de tu React (normalmente http://localhost:5173).`
+        );
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Helper para traducir estados del Frontend (masculino/espacio) al Backend (femenino/guion bajo esperado por la DB)
+   */
+  _mapEstadoToBackend(estado) {
+    if (!estado) return 'Abierta';
+    const est = String(estado).trim();
+    if (est === 'Abierto' || est === 'Abierta') return 'Abierta';
+    if (est === 'Cerrado' || est === 'Cerrada') return 'Cerrada';
+    if (est === 'En Proceso' || est === 'En_Proceso' || est === 'En_proceso' || est === 'En proceso') return 'En_Proceso';
+    return est;
+  },
+
+  /**
+   * Helper para traducir estados del Backend (femenino/guion bajo) al Frontend (masculino/espacio usado en UI de React)
+   */
+  _mapEstadoToFrontend(estado) {
+    if (!estado) return 'Abierto';
+    const est = String(estado).trim();
+    if (est === 'Abierta' || est === 'Abierto') return 'Abierto';
+    if (est === 'Cerrada' || est === 'Cerrado') return 'Cerrado';
+    if (est === 'En_Proceso' || est === 'En_proceso' || est === 'En Proceso' || est === 'En proceso') return 'En Proceso';
+    return est;
+  },
+
+  /**
+   * Helper para extraer un Array de incidencias de forma flexible de cualquier
+   * estructura de respuesta del Backend (por ejemplo, encapsuladas en 'datos' o 'data')
+   */
+  _extractArray(data) {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+
+    // Buscar en propiedades de respuesta comunes
+    const target = data.datos ?? data.data ?? data.items ?? data.list ?? data.incidencias;
+    if (Array.isArray(target)) return target;
+
+    // Si target es un objeto, escanear si tiene algún array adentro
+    if (target && typeof target === 'object') {
+      if (Array.isArray(target.incidencias)) return target.incidencias;
+      if (Array.isArray(target.items)) return target.items;
+      if (Array.isArray(target.data)) return target.data;
+      if (Array.isArray(target.list)) return target.list;
+
+      // Buscar el primer array que contenga el objeto target
+      for (const key in target) {
+        if (Array.isArray(target[key])) {
+          return target[key];
+        }
+      }
+
+      // Si target representa una incidencia única
+      if (target.id || target.id_incidencia || target.asunto) {
+        return [target];
+      }
+    }
+
+    // Buscar en la raíz de 'data' si hay algún array
+    for (const key in data) {
+      if (Array.isArray(data[key])) {
+        return data[key];
+      }
+    }
+
+    // Si data en sí representa un objeto individual
+    if (typeof data === 'object') {
+      if (data.id || data.id_incidencia || data.asunto) {
+        return [data];
+      }
+    }
+
+    return [];
+  },
+
+  /**
+   * Helper de traducción para normalizar las propiedades del Backend
+   * a campos estandarizados del Frontend de React.
+   */
+  _mapIncidencia(rawItem) {
+    if (!rawItem) return null;
+
+    // Normalizar ID
+    const idVal = rawItem.id ?? rawItem.id_incidencia ?? rawItem.idIncidencia ?? rawItem.id_incidencias ?? rawItem.folio ?? '';
+    const id = idVal !== '' ? String(idVal) : 'INC-000';
+
+    // Campos primarios
+    const asunto = rawItem.asunto ?? rawItem.titulo ?? rawItem.nombre ?? rawItem.issue ?? rawItem.subject ?? 'Sin Asunto';
+    const categoria = rawItem.categoria ?? rawItem.category ?? rawItem.tipo ?? rawItem.area ?? 'Otros';
+    const prioridad = rawItem.prioridad ?? rawItem.priority ?? rawItem.nivel ?? 'Baja';
+    
+    // Normalizar el estado al género masculino para que funcione con el CSS y los selects
+    const rawEstado = rawItem.estado ?? rawItem.status ?? rawItem.id_estado ?? rawItem.state ?? 'Abierto';
+    const estado = this._mapEstadoToFrontend(rawEstado);
+    
+    const descripcion = rawItem.descripcion ?? rawItem.description ?? rawItem.detalle ?? rawItem.mensaje ?? 'Sin Descripción';
+    
+    // Metadatos
+    const fechaCreacion = rawItem.fechaCreacion ?? rawItem.fecha_creacion ?? rawItem.fecha ?? rawItem.creado_el ?? rawItem.createdAt ?? new Date().toISOString();
+    const creador = rawItem.creador ?? rawItem.usuario ?? rawItem.reporta ?? rawItem.nombreUsuario ?? rawItem.creadoPor ?? rawItem.createdBy ?? 'Usuario';
+    const observaciones = rawItem.observaciones ?? rawItem.comentarios ?? rawItem.observacion ?? rawItem.comments ?? '';
+
+    // Historial / Auditoría de Cambios
+    const rawHistorial = rawItem.historial ?? rawItem.logs ?? rawItem.historial_estados ?? rawItem.movimientos;
+    let historial = [];
+    if (Array.isArray(rawHistorial)) {
+      historial = rawHistorial.map(h => ({
+        fecha: h.fecha ?? h.createdAt ?? h.fecha_movimiento ?? new Date().toISOString(),
+        estado: this._mapEstadoToFrontend(h.estado ?? h.status ?? 'Abierto'),
+        observacion: h.observacion ?? h.observaciones ?? h.comentario ?? 'Cambio registrado',
+        usuario: h.usuario ?? h.nombreUsuario ?? h.creadoPor ?? 'Usuario'
+      }));
+    } else {
+      // Generar historial implícito para evitar fallas en UI
+      historial = [
+        {
+          fecha: fechaCreacion,
+          estado: 'Abierto',
+          observacion: observaciones || 'Incidencia registrada en el sistema.',
+          usuario: creador
+        }
+      ];
+      // Si ya está en otro estado, simular la transición inicial
+      if (estado !== 'Abierto') {
+        historial.push({
+          fecha: new Date(fechaCreacion).getTime() + 60000 < Date.now() ? new Date(new Date(fechaCreacion).getTime() + 60000).toISOString() : new Date().toISOString(),
+          estado: estado,
+          observacion: observaciones || 'Estado actualizado por el sistema.',
+          usuario: 'Sistema'
+        });
+      }
+    }
+
+    return {
+      id,
+      asunto,
+      categoria,
+      prioridad,
+      estado,
+      descripcion,
+      fechaCreacion,
+      creador,
+      observaciones,
+      historial
+    };
+  },
+
   // 1. Iniciar sesión (POST /api/acceso/login)
   async login(email, password) {
-    console.log(`[API Call] POST /api/acceso/login - Email: ${email}`);
-
     if (this.isDemoMode()) {
-      // Simulación de delay de red
       await new Promise(resolve => setTimeout(resolve, 800));
 
       const user = MOCK_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
       
-      // Validación mock
       if (user && password === 'admin123' || (user && user.role === 'Soporte' && password === 'soporte123') || (user && user.role === 'Usuario' && password === 'usuario123')) {
         return {
           success: true,
@@ -130,53 +328,66 @@ export const apiService = {
     }
 
     // Petición real
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/acceso/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Error de autenticación en servidor');
-      }
-      return {
-        success: true,
-        user: data.user,
-        token: data.token
-      };
-    } catch (error) {
-      console.error('Error en login real:', error);
-      throw error;
+    const bodyData = {
+      email: email,
+      password: password,
+      correo: email,
+      usuario: email,
+      contrasena: password,
+      clave: password
+    };
+
+    const data = await this._request('/api/acceso/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyData)
+    });
+
+    // Comprobar indicadores de éxito lógicos del Backend (incluso si responde con HTTP Status 200 OK)
+    const isSuccess = data.statusExec === true || data.statusExec === 1 || data.success === true || data.flag === 1 || data.flag === true;
+    if (!isSuccess) {
+      throw new Error(data.msg || data.message || data.mensaje || 'Usuario o contraseña incorrectos.');
     }
+
+    // Extraer datos del usuario de forma flexible (incluyendo 'datos' devuelto por el backend)
+    const rawUser = data.datos || data.user || data.usuario || data.data || data;
+    const extractedToken = data.token || data.accessToken || data.jwt || data.tokenAcceso || data.token_acceso || '';
+
+    // Mapear campos para asegurar compatibilidad con la UI de React
+    const mappedUser = {
+      id: rawUser.id || rawUser.idUsuario || rawUser.id_usuario || 1,
+      name: rawUser.name || rawUser.nombre || rawUser.nombreUsuario || rawUser.fullName || rawUser.email || rawUser.correo || 'Usuario',
+      email: rawUser.email || rawUser.correo || email,
+      role: rawUser.role || rawUser.rol || rawUser.perfil || 'Usuario',
+      avatar: rawUser.avatar || rawUser.foto || rawUser.imagen || `https://ui-avatars.com/api/?name=${encodeURIComponent(rawUser.name || rawUser.nombre || 'Usuario')}&background=8b5cf6&color=fff`
+    };
+
+    return {
+      success: true,
+      user: mappedUser,
+      token: extractedToken
+    };
   },
 
   // 2. Obtener incidencias (GET /api/incidencias)
   async getIncidencias() {
-    console.log('[API Call] GET /api/incidencias');
-
     if (this.isDemoMode()) {
       await new Promise(resolve => setTimeout(resolve, 500));
-      const list = JSON.parse(localStorage.getItem('hd_incidencias'));
-      return list;
+      return JSON.parse(localStorage.getItem('hd_incidencias'));
     }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/incidencias`, {
-        headers: this._getAuthHeaders()
-      });
-      if (!response.ok) throw new Error('Error al obtener incidencias del servidor');
-      return await response.json();
-    } catch (error) {
-      console.error('Error al obtener incidencias reales:', error);
-      throw error;
-    }
+    // Petición real
+    const data = await this._request('/api/incidencias', {
+      headers: this._getAuthHeaders()
+    });
+
+    // Extraer incidencias y normalizarlas
+    const arr = this._extractArray(data);
+    return arr.map(item => this._mapIncidencia(item)).filter(Boolean);
   },
 
   // 3. Obtener incidencia por ID (GET /api/incidencias/{id})
   async getIncidenciaById(id) {
-    console.log(`[API Call] GET /api/incidencias/${id}`);
-
     if (this.isDemoMode()) {
       await new Promise(resolve => setTimeout(resolve, 300));
       const list = JSON.parse(localStorage.getItem('hd_incidencias'));
@@ -185,32 +396,25 @@ export const apiService = {
       return item;
     }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/incidencias/${id}`, {
-        headers: this._getAuthHeaders()
-      });
-      if (!response.ok) throw new Error('Error al obtener los detalles de la incidencia');
-      return await response.json();
-    } catch (error) {
-      console.error('Error al obtener incidencia real por ID:', error);
-      throw error;
-    }
+    // Petición real
+    const data = await this._request(`/api/incidencias/${id}`, {
+      headers: this._getAuthHeaders()
+    });
+
+    const item = data.datos ?? data.data ?? data.incidencia ?? data;
+    return this._mapIncidencia(item);
   },
 
   // 4. Registrar incidencia (POST /api/incidencias)
   async registrarIncidencia(nuevaIncidencia, usuarioNombre = 'Usuario') {
-    console.log('[API Call] POST /api/incidencias', nuevaIncidencia);
-
     if (this.isDemoMode()) {
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      // Validaciones básicas
       if (!nuevaIncidencia.asunto || !nuevaIncidencia.descripcion || !nuevaIncidencia.categoria || !nuevaIncidencia.prioridad) {
         throw new Error('Todos los campos del formulario son obligatorios.');
       }
 
       const list = JSON.parse(localStorage.getItem('hd_incidencias'));
-      
       const newIdNum = list.length + 1;
       const formattedId = `INC-${String(newIdNum).padStart(3, '0')}`;
 
@@ -219,7 +423,7 @@ export const apiService = {
         asunto: nuevaIncidencia.asunto,
         categoria: nuevaIncidencia.categoria,
         prioridad: nuevaIncidencia.prioridad,
-        estado: 'Abierto', // Por defecto inicia Abierto
+        estado: 'Abierto',
         descripcion: nuevaIncidencia.descripcion,
         fechaCreacion: new Date().toISOString(),
         creador: usuarioNombre,
@@ -234,7 +438,7 @@ export const apiService = {
         ]
       };
 
-      list.unshift(createdItem); // Insertar al inicio para que aparezca primero
+      list.unshift(createdItem);
       localStorage.setItem('hd_incidencias', JSON.stringify(list));
 
       return {
@@ -244,35 +448,104 @@ export const apiService = {
       };
     }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/incidencias`, {
-        method: 'POST',
-        headers: this._getAuthHeaders(),
-        body: JSON.stringify(nuevaIncidencia)
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Error al guardar la incidencia en el servidor');
+    // Petición real
+    let userIdVal = 1;
+    const sessionStr = localStorage.getItem('helpdesk_session');
+    if (sessionStr) {
+      try {
+        const session = JSON.parse(sessionStr);
+        if (session.user && session.user.id) {
+          userIdVal = session.user.id;
+        }
+      } catch (e) {
+        console.error('Error al recuperar ID del usuario de la sesión:', e);
       }
-      return {
-        success: true,
-        message: data.message || 'Incidencia registrada con éxito',
-        incidencia: data.incidencia
-      };
-    } catch (error) {
-      console.error('Error al registrar incidencia real:', error);
-      throw error;
     }
+
+    // Traducir el estado inicial al formato del Backend
+    const initialStatus = this._mapEstadoToBackend('Abierto');
+
+    // Inyectamos múltiples variantes de propiedades para evitar fallas por nomenclatura en la BD (camelCase, snake_case y PascalCase)
+    const payloadCompleto = {
+      // Título / Asunto
+      asunto: nuevaIncidencia.asunto,
+      Asunto: nuevaIncidencia.asunto,
+      titulo: nuevaIncidencia.asunto,
+      Titulo: nuevaIncidencia.asunto,
+      title: nuevaIncidencia.asunto,
+      Title: nuevaIncidencia.asunto,
+      subject: nuevaIncidencia.asunto,
+      Subject: nuevaIncidencia.asunto,
+
+      // Descripción / Detalle
+      descripcion: nuevaIncidencia.descripcion,
+      Descripcion: nuevaIncidencia.descripcion,
+      description: nuevaIncidencia.descripcion,
+      Description: nuevaIncidencia.descripcion,
+      detalle: nuevaIncidencia.descripcion,
+      Detalle: nuevaIncidencia.descripcion,
+
+      // Categoría / Área
+      categoria: nuevaIncidencia.categoria,
+      Categoria: nuevaIncidencia.categoria,
+      category: nuevaIncidencia.categoria,
+      Category: nuevaIncidencia.categoria,
+      tipo: nuevaIncidencia.categoria,
+      Tipo: nuevaIncidencia.categoria,
+
+      // Prioridad / Nivel
+      prioridad: nuevaIncidencia.prioridad,
+      Prioridad: nuevaIncidencia.prioridad,
+      priority: nuevaIncidencia.prioridad,
+      Priority: nuevaIncidencia.prioridad,
+      nivel: nuevaIncidencia.prioridad,
+      Nivel: nuevaIncidencia.prioridad,
+
+      // Estado / Status inicial traducido
+      estado: initialStatus,
+      Estado: initialStatus,
+      status: initialStatus,
+      Status: initialStatus,
+      state: initialStatus,
+      State: initialStatus,
+
+      // IDs de usuario vinculados
+      idUsuario: userIdVal,
+      IdUsuario: userIdVal,
+      id_usuario: userIdVal,
+      usuarioId: userIdVal,
+      UsuarioId: userIdVal,
+      userId: userIdVal,
+      UserId: userIdVal,
+      idCreador: userIdVal,
+      IdCreador: userIdVal,
+      creadorId: userIdVal,
+      CreadorId: userIdVal,
+      creador: usuarioNombre,
+      Creador: usuarioNombre,
+      usuario: usuarioNombre,
+      Usuario: usuarioNombre
+    };
+
+    const data = await this._request('/api/incidencias', {
+      method: 'POST',
+      headers: this._getAuthHeaders(),
+      body: JSON.stringify(payloadCompleto)
+    });
+
+    const item = data.datos ?? data.data ?? data.incidencia ?? data;
+    return {
+      success: true,
+      message: data.message || data.mensaje || data.msg || 'Incidencia registrada con éxito',
+      incidencia: this._mapIncidencia(item)
+    };
   },
 
   // 5. Actualizar estado de incidencia (PUT /api/incidencias/{id}/estado)
   async actualizarEstado(id, nuevoEstado, observaciones, usuarioNombre = 'Administrador') {
-    console.log(`[API Call] PUT /api/incidencias/${id}/estado - Estado: ${nuevoEstado}`);
-
     if (this.isDemoMode()) {
       await new Promise(resolve => setTimeout(resolve, 600));
 
-      // Caso de error de la Prueba 6: Observaciones vacías o estado vacío
       if (!observaciones || observaciones.trim() === '') {
         throw new Error('Se requiere ingresar una observación/comentario obligatoriamente para justificar el cambio de estado.');
       }
@@ -290,24 +563,18 @@ export const apiService = {
 
       const incidencia = list[index];
 
-      // Regla de Negocio: No se puede cambiar el estado de una incidencia Cerrada
       if (incidencia.estado === 'Cerrado' && nuevoEstado !== 'Cerrado') {
         throw new Error('No se admiten cambios de estado en incidencias que ya han sido cerradas definitivamente.');
       }
 
-      // Regla de Negocio: No se puede cambiar al mismo estado
       if (incidencia.estado === nuevoEstado) {
         throw new Error(`La incidencia ya se encuentra en estado "${nuevoEstado}". Selecciona un estado diferente.`);
       }
 
-      // Transiciones permitidas (Simuladas para Prueba 6)
-      // Ejemplo: No se puede saltar directamente de "Abierto" a "Cerrado" sin pasar por "En Proceso" (para simular fallo de reglas)
-      // Excepto si es Administrador. Si simulamos un error:
       if (incidencia.estado === 'Abierto' && nuevoEstado === 'Cerrado') {
         throw new Error('Transición de estado no permitida: No es posible cerrar una incidencia en estado "Abierto" directamente sin antes marcarla "En Proceso" para su revisión.');
       }
 
-      // Aplicar actualización
       incidencia.estado = nuevoEstado;
       incidencia.observaciones = observaciones;
       incidencia.historial.push({
@@ -327,25 +594,88 @@ export const apiService = {
       };
     }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/incidencias/${id}/estado`, {
-        method: 'PUT',
-        headers: this._getAuthHeaders(),
-        body: JSON.stringify({ estado: nuevoEstado, observaciones })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Error al actualizar el estado en el servidor');
-      }
-      return {
-        success: true,
-        message: data.message || 'Estado actualizado con éxito',
-        incidencia: data.incidencia
-      };
-    } catch (error) {
-      console.error('Error al actualizar estado real:', error);
-      throw error;
+    // Petición real
+    let userIdVal = 1;
+    const sessionStr = localStorage.getItem('helpdesk_session');
+    if (sessionStr) {
+      try {
+        const session = JSON.parse(sessionStr);
+        if (session.user && session.user.id) {
+          userIdVal = session.user.id;
+        }
+      } catch (e) {}
     }
+
+    // Traducir el nuevo estado al género y formato del Backend (ej. "Cerrado" -> "Cerrada")
+    const estadoBackend = this._mapEstadoToBackend(nuevoEstado);
+
+    // Inyectamos múltiples variantes de propiedad para el estado, observaciones e identificadores (camelCase, snake_case y PascalCase)
+    const payloadActualizacion = {
+      // Identificadores de la incidencia
+      id: id,
+      Id: id,
+      idIncidencia: id,
+      IdIncidencia: id,
+      id_incidencia: id,
+      folio: id,
+      Folio: id,
+
+      // Estado / Status (mapeado al formato que el backend espera)
+      estado: estadoBackend,
+      Estado: estadoBackend,
+      nuevoEstado: estadoBackend,
+      NuevoEstado: estadoBackend,
+      nuevo_estado: estadoBackend,
+      status: estadoBackend,
+      Status: estadoBackend,
+      state: estadoBackend,
+      State: estadoBackend,
+      nuevoStatus: estadoBackend,
+      NuevoStatus: estadoBackend,
+      nuevo_status: estadoBackend,
+
+      // Observaciones / Comentarios
+      observaciones: observaciones,
+      Observaciones: observaciones,
+      observacion: observaciones,
+      Observacion: observaciones,
+      comentario: observaciones,
+      Comentario: observaciones,
+      comentarios: observaciones,
+      Comentarios: observaciones,
+      nota: observaciones,
+      Nota: observaciones,
+      notas: observaciones,
+      Notas: observaciones,
+      justificacion: observaciones,
+      Justificacion: observaciones,
+
+      // IDs de usuario operador/actualizador
+      idUsuario: userIdVal,
+      IdUsuario: userIdVal,
+      id_usuario: userIdVal,
+      usuarioId: userIdVal,
+      UsuarioId: userIdVal,
+      userId: userIdVal,
+      UserId: userIdVal,
+      idOperador: userIdVal,
+      IdOperador: userIdVal,
+      operadorId: userIdVal,
+      OperadorId: userIdVal
+    };
+
+    const data = await this._request(`/api/incidencias/${id}/estado`, {
+      method: 'PUT',
+      headers: this._getAuthHeaders(),
+      body: JSON.stringify(payloadActualizacion)
+    });
+
+    const item = data.datos ?? data.data ?? data.incidencia ?? data;
+    return {
+      success: true,
+      message: data.message || data.mensaje || data.msg || 'Estado actualizado con éxito',
+      incidencia: this._mapIncidencia(item)
+    };
   },
 
   // Helper para headers con token JWT

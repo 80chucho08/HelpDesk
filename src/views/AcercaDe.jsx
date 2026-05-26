@@ -7,21 +7,21 @@ import React from 'react';
 export default function AcercaDe() {
   const equipo = [
     {
-      nombre: 'Jesús Alberto Chuchuca',
+      nombre: 'Jesús Alfonso Navarro Carbajal',
       rol: 'Desarrollador Full Stack / UI Architect',
-      carrera: 'Ingeniería en Desarrollo de Software',
-      institucion: 'Universidad Tecnológica Latinoamericana',
-      matricula: 'UTL-2024-8902',
-      email: 'j.chuchuca@alumno.utl.edu.mx',
+      carrera: 'Ingeniería en Sistemas Computacionales',
+      institucion: 'Instituto Tecnologico de Pachuca',
+      Nocontrol: '22200964',
+      email: 'l22200964@pachuca.tecnm.mx',
       avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&h=150&q=80'
     },
     {
-      nombre: 'Andrea Rangel Mendoza',
-      rol: 'Especialista en QA / Diseñadora de Base de Datos',
-      carrera: 'Ingeniería en Desarrollo de Software',
-      institucion: 'Universidad Tecnológica Latinoamericana',
-      matricula: 'UTL-2024-4112',
-      email: 'a.rangel@alumno.utl.edu.mx',
+      nombre: 'Luis Carlos Marquez Strociak',
+      rol: 'Especialista en QA / Diseñador de Base de Datos',
+      carrera: 'Ingeniería en Sistemas Computacionales',
+      institucion: 'Instituto Tecnologico de Pachuca',
+      Nocontrol: '23200259',
+      email: 'l23200259@pachuca.tecnm.mx',
       avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&h=150&q=80'
     }
   ];
@@ -54,7 +54,7 @@ export default function AcercaDe() {
               Detalles del Proyecto
             </h2>
             <p className="text-xs text-slate-550 dark:text-slate-400 leading-relaxed">
-              Esta aplicación fue construida como entregable académico para acreditar la materia de **Desarrollo de Aplicaciones Web**. Cumple con los lineamientos de integración con API, protección de vistas (Login) y persistencia del estado en base de datos.
+              Esta aplicación fue construida como entregable académico para acreditar la materia de **Ingeniería FullStack**. Cumple con los lineamientos de integración con API, protección de vistas (Login) y persistencia del estado en base de datos.
             </p>
           </div>
 
@@ -64,15 +64,15 @@ export default function AcercaDe() {
           <div className="flex flex-col gap-3 text-xs">
             <div className="flex justify-between items-center">
               <span className="text-slate-450 dark:text-slate-500 font-semibold uppercase tracking-wider">Materia:</span>
-              <span className="font-bold text-slate-700 dark:text-slate-350">Desarrollo Web Integrado</span>
+              <span className="font-bold text-slate-700 dark:text-slate-350">Ingeniería FullStack</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-slate-450 dark:text-slate-500 font-semibold uppercase tracking-wider">Ciclo Académico:</span>
-              <span className="font-bold text-slate-700 dark:text-slate-350">Mayo - Agosto 2026</span>
+              <span className="font-bold text-slate-700 dark:text-slate-350">Enero - Junio 2026</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-slate-450 dark:text-slate-500 font-semibold uppercase tracking-wider">Versión:</span>
-              <span className="font-bold text-slate-700 dark:text-slate-350">v1.2.0-MVP</span>
+              <span className="font-bold text-slate-700 dark:text-slate-350">v1.0-MVP</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-slate-450 dark:text-slate-500 font-semibold uppercase tracking-wider">Base de Datos:</span>
@@ -118,8 +118,8 @@ export default function AcercaDe() {
                 </div>
                 <div className="flex justify-between items-center mt-1">
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Matrícula</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-300">{persona.matricula}</span>
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">No. Control</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">{persona.Nocontrol}</span>
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Contacto</span>

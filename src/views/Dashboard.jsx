@@ -71,14 +71,21 @@ export default function Dashboard({ addToast, currentUser }) {
     }
   };
 
-  // Filtrado de incidencias en memoria
+  // Filtrado de incidencias en memoria (Defensivo contra nulos)
   const filteredIncidencias = incidencias.filter(item => {
+    if (!item) return false;
+
+    const itemId = String(item.id || '').toLowerCase();
+    const itemAsunto = String(item.asunto || '').toLowerCase();
+    const itemCreador = String(item.creador || '').toLowerCase();
+    const search = searchTerm.toLowerCase();
+
     const matchesSearch = 
-      item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.asunto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.creador.toLowerCase().includes(searchTerm.toLowerCase());
+      itemId.includes(search) ||
+      itemAsunto.includes(search) ||
+      itemCreador.includes(search);
     
-    const matchesStatus = statusFilter === 'Todos' || item.estado === statusFilter;
+    const matchesStatus = statusFilter === 'Todos' || String(item.estado || '') === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
