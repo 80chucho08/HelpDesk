@@ -54,12 +54,20 @@ HelpDesk es una plataforma web moderna y responsiva diseñada para el reporte, s
 npm install
 ```
 
-### Paso 2: Configurar las variables de entorno
-Crea un archivo `.env` en la raíz del proyecto y define la URL del backend real:
+### Paso 2: Configurar las variables de entorno (Evitar CORS)
+El proyecto incluye un proxy inverso integrado en el servidor de desarrollo de Vite. Para activarlo y evitar errores de CORS (Cross-Origin Resource Sharing) en tu navegador:
+
+1. Abre el archivo `.env` en la raíz del proyecto.
+2. Asegúrate de configurar `VITE_API_PROXY_TARGET` con la dirección de tu backend real y deja `VITE_API_BASE_URL` en blanco (vacío):
+
 ```env
-VITE_API_BASE_URL=https://localhost:44365
+# Deja VITE_API_BASE_URL vacío para usar el proxy inverso de Vite (evita CORS)
+VITE_API_BASE_URL=
+
+# URL real del backend donde el proxy de Vite redirigirá las peticiones
+VITE_API_PROXY_TARGET=https://localhost:44365
 ```
-*(Nota: Si no se define o no encuentra el archivo `.env`, la aplicación usará `http://localhost:8080` como URL de reserva).*
+*(Nota: El proxy de desarrollo está configurado en `vite.config.js` con `secure: false` para omitir la validación de certificados SSL auto-firmados en localhost HTTPS).*
 
 ### Paso 3: Ejecutar el servidor de desarrollo
 ```bash

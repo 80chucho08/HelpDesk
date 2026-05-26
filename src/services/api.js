@@ -4,8 +4,8 @@
  * para cumplir con las pruebas de validación requeridas.
  */
 
-const FALLBACK_URL = 'http://localhost:8080';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || FALLBACK_URL;
+const FALLBACK_URL = '';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? FALLBACK_URL;
 
 // Base de datos de simulación inicial
 const MOCK_USERS = [
